@@ -1,0 +1,5 @@
+{
+  "name": "OrderFlow Parser V2 - Set Up Module - 2025128",
+  "description": "An AI-powered document processor that extracts line items from Purchasing and Sales order PDFs/images and converts them into a flattened, exportable spreadsheet format.",
+  "requestFramePermissions": []
+}
