@@ -1,6 +1,7 @@
+
 import * as XLSX from "xlsx";
-import { POLineRow } from "../types";
-import { CONTROL_SURFACE_HEADERS, toControlSurfaceRecord } from "./controlSurfaceExport";
+import { POLineRow } from "../types.ts";
+import { CONTROL_SURFACE_HEADERS, toControlSurfaceRecord } from "./controlSurfaceExport.ts";
 
 type ControlSurfaceRow = Record<string, any>;
 

@@ -10,8 +10,8 @@ export type POLineRow = {
   doc_type: DocType;
 
   customer_name?: string;
-  customer_order_no?: string;     // aka customer_po_number
-  abh_order_no?: string;          // ABH internal order (if known later)
+  customer_order_no?: string;
+  abh_order_no?: string;
   document_date?: string;
 
   // shipping/billing
@@ -37,10 +37,15 @@ export type POLineRow = {
   abh_item_no_candidate?: string;
   abh_item_no_final?: string;
 
+  // Extra attributes
+  manufacturer?: string;
+  finish?: string;
+  category?: string;
+
   // classification + detection
   item_class: ItemClass;
-  edge_case_flags: string[];         // normalized list
-  raw_edge_case_notes?: string;      // optional, for traceability
+  edge_case_flags: string[];
+  raw_edge_case_notes?: string;
 
   // confidence (0..1 internal)
   confidence_score?: number;
@@ -54,48 +59,15 @@ export type POLineRow = {
   policy_version_applied?: string;
   policy_rule_ids_applied?: string[];
   
-  // compatibility helpers (derived or mapped)
+  // compatibility helpers
   match_score?: number;
   sage_import_ready?: boolean;
   sage_blockers?: string[];
 };
 
-// --- API interfaces for Gemini integration ---
-export enum DocumentType {
-  INVOICE = 'Invoice',
-  SALES_ORDER = 'Sales Order',
-  PURCHASE_ORDER = 'Purchase Order',
-  PICKING_SHEET = 'Picking Sheet',
-  UNKNOWN = 'Unknown'
-}
-
-export interface DocumentData {
-  documentType: DocumentType;
-  orderNumber: string;
-  orderDate: string;
-  customerName: string;
-  vendorName: string;
-  customerPO: string;
-  currency: string;
-  billToAddressRaw?: string;
-  shipToAddressRaw?: string;
-  markInstructions?: string;
-  lineItems: Array<{
-    itemNumber: string;
-    description: string;
-    unit: string;
-    quantityOrdered: number;
-    quantityShipped: number;
-    unitPrice: number;
-    totalAmount: number;
-    manufacturer?: string;
-    finish?: string;
-    category?: string;
-    voltage?: string;
-    failMode?: string;
-  }>;
-}
+// Internal interface for parsing results from geminiService
+import { POExportV1 } from "./services/abhSchema.ts";
 
 export interface GeminiParsingResult {
-  documents: DocumentData[];
+  documents: POExportV1[];
 }

@@ -1,19 +1,11 @@
-import { GeminiParsingResult, POLineRow, DocType, ItemClass } from "../types";
-import { ReferencePack } from "../referencePack.schema";
-import { ReferenceService } from "./referenceService";
-import { applyPolicyRouting } from "./policyRouting";
-import { ControlSurfacePolicy } from "../policy/controlSurfacePolicy";
-import { loadOrgProfile } from "../setup/orgProfile.store";
 
-const DIMENSION_RE = /\bCUT\s*TO\b|(\d+\s*-\s*\d+\/\d+)|(\d+\s*\/\s*\d+)\s*\"/i;
-
-function docTypeToRowDocType(dt: string): DocType {
-  const normalized = (dt || "").toUpperCase();
-  if (normalized.includes("INVOICE")) return "INVOICE";
-  if (normalized.includes("PURCHASE ORDER") || normalized.includes("ORDER")) return "PURCHASE_ORDER";
-  if (normalized.includes("CREDIT")) return "CREDIT_MEMO";
-  return "UNKNOWN";
-}
+import { GeminiParsingResult, POLineRow, DocType, ItemClass } from "../types.ts";
+// Corrected import: abhSchema.ts exports POExportV1, not ABH_PO_V1_Export
+import { POExportV1 } from "./abhSchema.ts";
+import { ReferencePack } from "../referencePack.schema.ts";
+import { ReferenceService } from "./referenceService.ts";
+import { applyPolicyRouting } from "./policyRouting.ts";
+import { ControlSurfacePolicy } from "../policy/controlSurfacePolicy.ts";
 
 export function geminiResultToPOLineRows(args: {
   parsed: GeminiParsingResult;
@@ -23,93 +15,53 @@ export function geminiResultToPOLineRows(args: {
 }): POLineRow[] {
   const { parsed, sourceFileStem, policy, refPack } = args;
   const rows: POLineRow[] = [];
-  let lineCounter = 1;
-
   const refService = refPack ? new ReferenceService(refPack) : null;
-  const profile = loadOrgProfile();
 
   for (const doc of parsed.documents ?? []) {
-    const doc_type = docTypeToRowDocType(doc.documentType);
-    const doc_id = (doc.orderNumber && doc.orderNumber.trim()) ? doc.orderNumber.trim() : sourceFileStem;
+    const doc_type = (doc.document.document_type || "PURCHASE_ORDER") as DocType;
+    const doc_id = doc.order.customer_order_no || sourceFileStem;
 
-    for (const li of doc.lineItems ?? []) {
-      const combinedText = `${li.itemNumber ?? ""} ${li.description ?? ""}`.trim();
-      const upperText = combinedText.toUpperCase();
-
-      // deterministic normalization
-      const mRef = refService?.normalizeManufacturer(combinedText) || refService?.normalizeManufacturer(li.manufacturer || "");
-      const candidate = mRef ? `${mRef.abbr}-${li.itemNumber}` : (li.itemNumber ?? "");
-
-      // Initial detection of standard system flags
-      const flags: string[] = [];
-      const instructions: string[] = [];
+    for (const li of doc.line_items ?? []) {
+      const p = li.parsed;
+      const combinedText = `${p.customer_item_no ?? ""} ${p.description ?? ""}`.trim();
       
-      if (doc_type === "CREDIT_MEMO") flags.push("CREDIT_MEMO");
-      if (upperText.includes("RGA")) flags.push("RGA");
-      if (upperText.includes("SPECIAL LAYOUT")) flags.push("SPECIAL_LAYOUT");
-      if (DIMENSION_RE.test(combinedText)) flags.push("CUSTOM_LENGTH");
-      if ((li.unitPrice ?? 0) === 0) flags.push("ZERO_DOLLAR");
+      // Catalog matching
+      const mRef = refService?.normalizeManufacturer(combinedText) || (p.manufacturer ? refService?.normalizeManufacturer(p.manufacturer) : undefined);
+      const abh_item = mRef ? `${mRef.abbr}-${p.customer_item_no}` : (p.abh_item_no || p.customer_item_no || "");
 
-      // Dynamic custom signal detection from Org Profile
-      if (profile?.policy?.exclusions) {
-        for (const rule of profile.policy.exclusions) {
-          // 1. Check Scope (Doc Type)
-          if (rule.scope_doc_type && rule.scope_doc_type.length > 0) {
-            if (!rule.scope_doc_type.includes(doc_type)) continue;
-          }
-
-          // 2. Check Triggers (Keywords)
-          if (rule.keywords && rule.keywords.length > 0) {
-            const hasKeyword = rule.keywords.some(k => upperText.includes(k.toUpperCase()));
-            if (hasKeyword && !flags.includes(rule.reason_code)) {
-              flags.push(rule.reason_code);
-              if (rule.instructions) instructions.push(rule.instructions);
-            }
-          }
-        }
-      }
-
-      const item_class: ItemClass =
-        (flags.includes("SPECIAL_LAYOUT") || flags.includes("CUSTOM_LENGTH")) ? "CUSTOM" :
-        (li.itemNumber && li.itemNumber.trim().length > 0) ? "CATALOG" :
-        "UNKNOWN";
+      const item_class: ItemClass = (li.flags.includes("SPECIAL_LAYOUT") || li.flags.includes("CUSTOM_DIMENSION")) ? "CUSTOM" : "CATALOG";
 
       rows.push({
         doc_id,
         doc_type,
-        customer_name: doc.customerName ?? "",
-        customer_order_no: doc.customerPO ?? "",
-        document_date: doc.orderDate ?? "",
+        customer_name: doc.parties.customer.name || "",
+        customer_order_no: doc.order.customer_order_no || "",
+        document_date: doc.order.order_date || "",
+        
+        line_no: rows.length + 1,
+        customer_item_no: p.customer_item_no || "",
+        customer_item_desc_raw: p.description || "",
+        qty: p.quantity,
+        uom: p.uom,
+        unit_price: p.unit_price,
+        extended_price: p.extended_price || (p.quantity * (p.unit_price || 0)),
+        currency: doc.order.currency || "USD",
 
-        line_no: lineCounter++,
-        customer_item_no: li.itemNumber ?? "",
-        customer_item_desc_raw: li.description ?? "",
-        qty: li.quantityOrdered || undefined,
-        uom: li.unit ?? "",
-        unit_price: li.unitPrice || undefined,
-        extended_price: li.totalAmount || undefined,
-        currency: doc.currency || "USD",
-
-        abh_item_no_candidate: candidate,
+        abh_item_no_candidate: abh_item,
+        manufacturer: p.manufacturer,
 
         item_class,
-        edge_case_flags: flags,
-        confidence_score: 0.65,
+        edge_case_flags: li.flags || [],
+        confidence_score: li.confidence.line_confidence,
 
         automation_lane: "ASSIST",
-        routing_reason: instructions.length > 0 ? instructions.join(" | ") : "",
+        routing_reason: doc.routing.reason_codes.join(" | "),
         fields_requiring_review: [],
-
-        bill_to_address_raw: doc.billToAddressRaw,
-        ship_to_address_raw: doc.shipToAddressRaw,
-        mark_instructions: doc.markInstructions,
-        
-        match_score: 0.65
+        match_score: li.confidence.line_confidence
       });
     }
   }
 
-  // Apply the dynamic policy routing
   return applyPolicyRouting(rows, policy, { phase: "PHASE_1" });
 }
 

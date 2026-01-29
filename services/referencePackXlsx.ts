@@ -1,6 +1,6 @@
 // services/referencePackXlsx.ts
 import * as XLSX from "xlsx";
-import { ReferencePack } from "../referencePack.schema";
+import { ReferencePack } from "../referencePack.schema.ts";
 
 const SHEETS = {
   MANUFACTURERS: "Manufacturers",

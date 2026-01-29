@@ -1,5 +1,5 @@
 // src/policy/policyVersioning.ts
-import { ControlSurfacePolicy } from "./controlSurfacePolicy";
+import { ControlSurfacePolicy } from "./controlSurfacePolicy.ts";
 
 async function sha256String(input: string): Promise<string> {
   const enc = new TextEncoder().encode(input);

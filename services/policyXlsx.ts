@@ -1,6 +1,6 @@
 // services/policyXlsx.ts
 import * as XLSX from "xlsx";
-import { ControlSurfacePolicy, PolicyRule } from "../policy/controlSurfacePolicy";
+import { ControlSurfacePolicy, PolicyRule } from "../policy/controlSurfacePolicy.ts";
 
 const POLICY_SHEET = "Policy_Rules";
 

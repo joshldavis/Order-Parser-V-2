@@ -1,4 +1,4 @@
-import { ReferencePack } from "../referencePack.schema"
+import { ReferencePack } from "../referencePack.schema.ts"
 
 export class ReferenceService {
   constructor(private ref: ReferencePack) {}

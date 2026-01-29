@@ -1,5 +1,5 @@
 // setup/orgProfile.store.ts
-import { OrgSetupProfile } from "./orgProfile.types";
+import { OrgSetupProfile } from "./orgProfile.types.ts";
 
 const KEY = "orderflow_org_profile_v1";
 
@@ -8,25 +8,34 @@ function nowIso() {
 }
 
 export function loadOrgProfile(): OrgSetupProfile | null {
-  const raw = localStorage.getItem(KEY);
-  if (!raw) return null;
   try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return null;
     return JSON.parse(raw) as OrgSetupProfile;
-  } catch {
+  } catch (e) {
+    console.warn("LocalStorage loadOrgProfile failed", e);
     return null;
   }
 }
 
 export function saveOrgProfile(profile: OrgSetupProfile) {
-  const toSave: OrgSetupProfile = {
-    ...profile,
-    updated_at: nowIso(),
-  };
-  localStorage.setItem(KEY, JSON.stringify(toSave));
+  try {
+    const toSave: OrgSetupProfile = {
+      ...profile,
+      updated_at: nowIso(),
+    };
+    localStorage.setItem(KEY, JSON.stringify(toSave));
+  } catch (e) {
+    console.warn("LocalStorage saveOrgProfile failed", e);
+  }
 }
 
 export function resetOrgProfile() {
-  localStorage.removeItem(KEY);
+  try {
+    localStorage.removeItem(KEY);
+  } catch (e) {
+    console.warn("LocalStorage resetOrgProfile failed", e);
+  }
 }
 
 export function ensureOrgProfileSeed(): OrgSetupProfile {
@@ -34,7 +43,7 @@ export function ensureOrgProfileSeed(): OrgSetupProfile {
   if (existing) return existing;
 
   const seeded: OrgSetupProfile = {
-    org_profile_id: crypto.randomUUID(),
+    org_profile_id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : Math.random().toString(36).substring(2),
     org_name: "Default Org",
     status: "NOT_STARTED",
     updated_at: nowIso(),

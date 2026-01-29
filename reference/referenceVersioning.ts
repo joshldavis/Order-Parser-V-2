@@ -1,5 +1,5 @@
 // reference/referenceVersioning.ts
-import { ReferencePack } from "../referencePack.schema";
+import { ReferencePack } from "../referencePack.schema.ts";
 
 export function bumpReferenceVersion(current: string, kind: "major" | "minor" | "patch"): string {
   const parts = current.split(".").map(n => parseInt(n, 10));

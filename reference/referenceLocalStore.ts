@@ -1,5 +1,5 @@
 // reference/referenceLocalStore.ts
-import { ReferencePack } from "../referencePack.schema";
+import { ReferencePack } from "../referencePack.schema.ts";
 
 const KEY = "orderflow.referencePack";
 
@@ -14,24 +14,32 @@ export const EMPTY_REFERENCE_PACK: ReferencePack = {
 };
 
 export function loadReferencePack(): ReferencePack {
-  const raw = localStorage.getItem(KEY);
-  if (!raw) return EMPTY_REFERENCE_PACK;
   try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return EMPTY_REFERENCE_PACK;
     const parsed = JSON.parse(raw);
-    // Basic validation to ensure it looks like a ReferencePack
     if (!parsed.version || !Array.isArray(parsed.manufacturers)) {
       return EMPTY_REFERENCE_PACK;
     }
     return parsed;
-  } catch {
+  } catch (e) {
+    console.warn("LocalStorage loadReferencePack failed", e);
     return EMPTY_REFERENCE_PACK;
   }
 }
 
 export function saveReferencePack(pack: ReferencePack) {
-  localStorage.setItem(KEY, JSON.stringify(pack));
+  try {
+    localStorage.setItem(KEY, JSON.stringify(pack));
+  } catch (e) {
+    console.warn("LocalStorage saveReferencePack failed", e);
+  }
 }
 
 export function clearReferencePack() {
-  localStorage.removeItem(KEY);
+  try {
+    localStorage.removeItem(KEY);
+  } catch (e) {
+    console.warn("LocalStorage clearReferencePack failed", e);
+  }
 }

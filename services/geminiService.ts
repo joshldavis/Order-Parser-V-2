@@ -1,76 +1,93 @@
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
-import { GeminiParsingResult } from "../types";
-import { ReferencePack } from "../referencePack.schema";
+import { GeminiParsingResult } from "../types.ts";
+import { ReferencePack } from "../referencePack.schema.ts";
 
-// Initialize with named parameter and direct process.env reference
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-const DOCUMENT_SCHEMA = {
+const MODIFIER_SCHEMA = {
   type: Type.OBJECT,
   properties: {
-    documentType: {
-      type: Type.STRING,
-      description: "Document type: e.g., 'Purchase Order', 'Sales Order', 'Invoice'.",
-    },
-    orderNumber: {
-      type: Type.STRING,
-      description: "The primary reference number (Order #, PO #, Invoice #).",
-    },
-    orderDate: {
-      type: Type.STRING,
-      description: "Date of issuance as written on the doc.",
-    },
-    customerName: {
-      type: Type.STRING,
-      description: "Full name of the customer or purchasing entity.",
-    },
-    vendorName: {
-      type: Type.STRING,
-      description: "Full name of the seller or issuing entity.",
-    },
-    customerPO: {
-      type: Type.STRING,
-      description: "Reference PO number provided by the customer.",
-    },
-    currency: {
-      type: Type.STRING,
-      description: "ISO currency code or symbol found.",
-    },
-    billToAddressRaw: { 
-      type: Type.STRING, 
-      description: "Complete Bill-To block text." 
-    },
-    shipToAddressRaw: { 
-      type: Type.STRING, 
-      description: "Complete Ship-To block text." 
-    },
-    markInstructions: { 
-      type: Type.STRING, 
-      description: "Special 'MARK FOR' or delivery instructions." 
-    },
-    lineItems: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          itemNumber: { type: Type.STRING, description: "Part Number or SKU." },
-          description: { type: Type.STRING, description: "Full item description." },
-          unit: { type: Type.STRING, description: "UOM (EA, FT, PC, etc.)." },
-          quantityOrdered: { type: Type.NUMBER, description: "Total quantity ordered." },
-          quantityShipped: { type: Type.NUMBER, description: "Total quantity shipped/supplied." },
-          unitPrice: { type: Type.NUMBER, description: "Cost per single unit." },
-          totalAmount: { type: Type.NUMBER, description: "Line extension total." },
-          manufacturer: { type: Type.STRING, description: "Identified manufacturer from Ref Pack or text." },
-          finish: { type: Type.STRING, description: "Identified finish code (e.g. US26D)." },
-          category: { type: Type.STRING, description: "Identified hardware category." },
-          voltage: { type: Type.STRING, description: "Voltage if electrified (e.g. 12V, 24V)." },
-          failMode: { type: Type.STRING, description: "Fail Safe/Secure if applicable." },
-        },
-        required: ["itemNumber", "description"],
-      },
-    },
+    type: { type: Type.STRING, description: "One of: CUT_TO_LENGTH, SPECIAL_LAYOUT, POWER_TRANSFER_CUTOUT, WIRING_SPEC, HANDING, FINISH, OTHER" },
+    value: { type: Type.STRING },
   },
-  required: ["documentType", "orderNumber", "lineItems"],
+  required: ["type"]
+};
+
+const LINE_ITEM_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    line_id: { type: Type.STRING },
+    raw: {
+      type: Type.OBJECT,
+      properties: { raw_text: { type: Type.STRING } },
+      required: ["raw_text"]
+    },
+    parsed: {
+      type: Type.OBJECT,
+      properties: {
+        customer_item_no: { type: Type.STRING },
+        abh_item_no: { type: Type.STRING },
+        manufacturer: { type: Type.STRING },
+        description: { type: Type.STRING },
+        quantity: { type: Type.NUMBER },
+        uom: { type: Type.STRING },
+        unit_price: { type: Type.NUMBER },
+        extended_price: { type: Type.NUMBER },
+        modifiers: { type: Type.ARRAY, items: MODIFIER_SCHEMA }
+      },
+      required: ["description", "quantity", "uom"]
+    },
+    confidence: {
+      type: Type.OBJECT,
+      properties: { line_confidence: { type: Type.NUMBER } },
+      required: ["line_confidence"]
+    },
+    flags: { type: Type.ARRAY, items: { type: Type.STRING } }
+  },
+  required: ["line_id", "raw", "parsed", "confidence", "flags"]
+};
+
+const ABH_DOCUMENT_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    schema_version: { type: Type.STRING },
+    document: {
+      type: Type.OBJECT,
+      properties: {
+        document_type: { type: Type.STRING, description: "PURCHASE_ORDER, SALES_ORDER, INVOICE, or CREDIT_MEMO" },
+      },
+      required: ["document_type"]
+    },
+    parties: {
+      type: Type.OBJECT,
+      properties: {
+        customer: { type: Type.OBJECT, properties: { name: { type: Type.STRING } }, required: ["name"] },
+        vendor: { type: Type.OBJECT, properties: { name: { type: Type.STRING } }, required: ["name"] }
+      },
+      required: ["customer", "vendor"]
+    },
+    order: {
+      type: Type.OBJECT,
+      properties: {
+        order_type: { type: Type.STRING, description: "PURCHASE_ORDER or CREDIT_MEMO" },
+        customer_order_no: { type: Type.STRING },
+        order_date: { type: Type.STRING, description: "YYYY-MM-DD" },
+        currency: { type: Type.STRING, description: "USD, CAD, etc." },
+      },
+      required: ["order_type", "customer_order_no"]
+    },
+    line_items: {
+      type: Type.ARRAY,
+      items: LINE_ITEM_SCHEMA
+    },
+    confidence: {
+      type: Type.OBJECT,
+      properties: { overall_confidence: { type: Type.NUMBER }, auto_process_eligible: { type: Type.BOOLEAN } }
+    },
+    routing: {
+      type: Type.OBJECT,
+      properties: { decision: { type: Type.STRING }, reason_codes: { type: Type.ARRAY, items: { type: Type.STRING } } }
+    }
+  },
+  required: ["schema_version", "document", "order", "line_items"]
 };
 
 const PARSER_SCHEMA = {
@@ -78,45 +95,11 @@ const PARSER_SCHEMA = {
   properties: {
     documents: {
       type: Type.ARRAY,
-      description: "A list of distinct business documents extracted from the file.",
-      items: DOCUMENT_SCHEMA,
+      items: ABH_DOCUMENT_SCHEMA
     }
   },
   required: ["documents"]
 };
-
-/**
- * Enhanced retry helper for 429 Resource Exhausted errors.
- * Uses a 10s base delay for rate limits to ensure the window resets.
- */
-async function withRetry<T>(fn: () => Promise<T>, onRetry?: (msg: string) => void, retries = 5, delay = 10000): Promise<T> {
-  try {
-    return await fn();
-  } catch (error: any) {
-    const errorStr = JSON.stringify(error).toUpperCase();
-    const messageStr = (error?.message || "").toUpperCase();
-    
-    const isRateLimit = 
-      error?.status === 429 || 
-      error?.error?.code === 429 ||
-      errorStr.includes("429") || 
-      errorStr.includes("RESOURCE_EXHAUSTED") ||
-      messageStr.includes("429") ||
-      messageStr.includes("RESOURCE_EXHAUSTED") ||
-      messageStr.includes("QUOTA");
-
-    if (isRateLimit && retries > 0) {
-      const waitTime = Math.round(delay / 1000);
-      const waitMsg = `Quota reached. Waiting ${waitTime}s for reset...`;
-      if (onRetry) onRetry(waitMsg);
-      console.warn(waitMsg);
-      await new Promise(resolve => setTimeout(resolve, delay));
-      // Exponentially increase delay for subsequent rate limits
-      return withRetry(fn, onRetry, retries - 1, delay * 1.5);
-    }
-    throw error;
-  }
-}
 
 export async function parseDocument(
   fileBase64: string, 
@@ -126,62 +109,49 @@ export async function parseDocument(
   onStatusUpdate?: (status: string) => void
 ): Promise<GeminiParsingResult> {
   
-  let refContext = '';
-  if (refPack) {
-    refContext = `
-    INDUSTRIAL KNOWLEDGE BASE (Reference Pack v${refPack.version}):
-    - Known Manufacturers: ${refPack.manufacturers.map(m => `${m.name} (${m.abbr})`).join(', ')}
-    - Standard Finishes: ${refPack.finishes.map(f => f.us_code).join(', ')}
-    - Hardware Categories: ${refPack.categories.map(c => c.category).join(', ')}
-    
-    INSTRUCTION: Normalize extracted data against this KB.
-    `;
-  }
+  if (onStatusUpdate) onStatusUpdate("Initializing AI Engine...");
 
-  const response: GenerateContentResponse = await withRetry(
-    () => ai.models.generateContent({
-      // Switched to Flash for better rate limit tolerance in batch scenarios
-      model: "gemini-3-flash-preview",
-      contents: [
-        {
-          parts: [
-            {
-              text: `EXTRACT DATA:
-              1. Header details (IDs, Dates, Entities).
-              2. ALL line items.
-              3. Normalize Mfr/Finish/Category based on context.
+  // Initialize inside function to avoid top-level process.env dependency
+  const apiKey = (window as any).process?.env?.API_KEY || "";
+  const ai = new GoogleGenAI({ apiKey });
 
-              ${refContext}
-              ${ocrText ? `OCR HINT:\n${ocrText}` : ''}
-
-              Return JSON following schema.`
+  const response: GenerateContentResponse = await ai.models.generateContent({
+    model: "gemini-3-pro-preview",
+    contents: [
+      {
+        parts: [
+          {
+            text: `EXTRACT ENTERPRISE ORDER DATA INTO ABH PO V1 FORMAT:
+            - Accurately identify all line items including Part Numbers, Quantities, and Descriptions.
+            - Extract header data: PO Number, Dates, and Parties.
+            - Identify special conditions like Credit Memos or Special Layouts.
+            - Output strictly as JSON following the provided schema.
+            ${ocrText ? `OCR HINT DATA: ${ocrText}` : ''}`
+          },
+          {
+            inlineData: {
+              data: fileBase64,
+              mimeType: mimeType,
             },
-            {
-              inlineData: {
-                data: fileBase64,
-                mimeType: mimeType,
-              },
-            },
-          ],
-        },
-      ],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: PARSER_SCHEMA,
-        temperature: 0.1,
+          },
+        ],
       },
-    }),
-    onStatusUpdate
-  );
+    ],
+    config: {
+      thinkingConfig: { thinkingBudget: 4000 },
+      responseMimeType: "application/json",
+      responseSchema: PARSER_SCHEMA,
+    },
+  });
 
   if (!response.text) {
-    throw new Error("Empty response from AI engine");
+    throw new Error("Gemini API returned an empty response.");
   }
 
   try {
     return JSON.parse(response.text.trim()) as GeminiParsingResult;
   } catch (e) {
-    console.error("JSON Parsing failed", e, response.text);
-    throw new Error("AI returned invalid JSON.");
+    console.error("Failed to parse Gemini JSON:", response.text);
+    throw new Error("The AI returned a malformed data structure.");
   }
 }

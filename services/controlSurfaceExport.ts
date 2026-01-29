@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import { POLineRow } from "../types";
+import { POLineRow } from "../types.ts";
 
 /**
  * These MUST match row 1 of PO_LineItem_Analysis in:

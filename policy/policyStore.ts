@@ -1,5 +1,5 @@
 // src/policy/policyStore.ts
-import { ControlSurfacePolicy } from "./controlSurfacePolicy";
+import { ControlSurfacePolicy } from "./controlSurfacePolicy.ts";
 
 export const DEFAULT_POLICY: ControlSurfacePolicy = {
   meta: {

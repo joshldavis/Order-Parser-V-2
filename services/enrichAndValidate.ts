@@ -1,5 +1,5 @@
-import { POLineRow, AutomationLane } from "../types";
-import { ReferenceService } from "./referenceService";
+import { POLineRow, AutomationLane } from "../types.ts";
+import { ReferenceService } from "./referenceService.ts";
 
 export function enrichAndValidate(
   rows: POLineRow[],
