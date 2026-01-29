@@ -1,22 +1,22 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { POLineRow, GeminiParsingResult } from './types';
-import { ReferencePack } from './referencePack.schema';
-import { parseDocument } from './services/geminiService';
-import { geminiResultToPOLineRows, downloadCsv } from './services/mappingService';
-import { buildControlSurfaceWorkbook, downloadBlob } from './services/xlsxExport';
-import { exportControlSurfaceCsv } from './services/controlSurfaceExport';
-import { ReferenceService } from './services/referenceService';
-import { enrichAndValidate } from './services/enrichAndValidate';
-import DataTable from './components/DataTable';
-import { loadPolicy, savePolicy } from './policy/policyLocalStore';
-import { PolicyAdmin } from './components/PolicyAdmin';
-import { ControlSurfacePolicy } from './policy/controlSurfacePolicy';
-import { applyPolicyRouting } from './services/policyRouting';
-import { loadReferencePack, saveReferencePack } from './reference/referenceLocalStore';
-import { ReferencePackAdmin } from './components/ReferencePackAdmin';
-import { SetupWizard } from './components/SetupWizard';
-import { loadOrgProfile, ensureOrgProfileSeed } from './setup/orgProfile.store';
-import { isSetupComplete, OrgSetupProfile } from './setup/orgProfile.types';
+import { POLineRow, GeminiParsingResult } from './types.ts';
+import { ReferencePack } from './referencePack.schema.ts';
+import { parseDocument } from './services/geminiService.ts';
+import { geminiResultToPOLineRows, downloadCsv } from './services/mappingService.ts';
+import { buildControlSurfaceWorkbook, downloadBlob } from './services/xlsxExport.ts';
+import { exportControlSurfaceCsv } from './services/controlSurfaceExport.ts';
+import { ReferenceService } from './services/referenceService.ts';
+import { enrichAndValidate } from './services/enrichAndValidate.ts';
+import DataTable from './components/DataTable.tsx';
+import { loadPolicy, savePolicy } from './policy/policyLocalStore.ts';
+import { PolicyAdmin } from './components/PolicyAdmin.tsx';
+import { ControlSurfacePolicy } from './policy/controlSurfacePolicy.ts';
+import { applyPolicyRouting } from './services/policyRouting.ts';
+import { loadReferencePack, saveReferencePack } from './reference/referenceLocalStore.ts';
+import { ReferencePackAdmin } from './components/ReferencePackAdmin.tsx';
+import { SetupWizard } from './components/SetupWizard.tsx';
+import { loadOrgProfile, ensureOrgProfileSeed } from './setup/orgProfile.store.ts';
+import { isSetupComplete, OrgSetupProfile } from './setup/orgProfile.types.ts';
 
 declare const Tesseract: any;
 
@@ -74,7 +74,6 @@ const App: React.FC = () => {
   const handleExportXlsx = async () => {
     if (rows.length === 0) return;
     try {
-      // Logic for building workbook. buildControlSurfaceWorkbook handles template logic internally
       const blob = buildControlSurfaceWorkbook({ poLineRows: rows });
       const timestamp = new Date().toISOString().split('T')[0];
       downloadBlob(`OrderFlow_Extract_${timestamp}.xlsx`, blob);

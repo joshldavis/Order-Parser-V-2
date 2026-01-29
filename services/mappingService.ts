@@ -3,6 +3,7 @@ import { ReferencePack } from "../referencePack.schema";
 import { ReferenceService } from "./referenceService";
 import { applyPolicyRouting } from "./policyRouting";
 import { ControlSurfacePolicy } from "../policy/controlSurfacePolicy";
+import { loadOrgProfile } from "../setup/orgProfile.store";
 
 const DIMENSION_RE = /\bCUT\s*TO\b|(\d+\s*-\s*\d+\/\d+)|(\d+\s*\/\s*\d+)\s*\"/i;
 
@@ -25,6 +26,7 @@ export function geminiResultToPOLineRows(args: {
   let lineCounter = 1;
 
   const refService = refPack ? new ReferenceService(refPack) : null;
+  const profile = loadOrgProfile();
 
   for (const doc of parsed.documents ?? []) {
     const doc_type = docTypeToRowDocType(doc.documentType);
@@ -32,20 +34,40 @@ export function geminiResultToPOLineRows(args: {
 
     for (const li of doc.lineItems ?? []) {
       const combinedText = `${li.itemNumber ?? ""} ${li.description ?? ""}`.trim();
+      const upperText = combinedText.toUpperCase();
 
       // deterministic normalization
       const mRef = refService?.normalizeManufacturer(combinedText) || refService?.normalizeManufacturer(li.manufacturer || "");
-      
       const candidate = mRef ? `${mRef.abbr}-${li.itemNumber}` : (li.itemNumber ?? "");
 
-      // Initial detection of edge cases to feed into policy engine
-      const desc = combinedText.toUpperCase();
+      // Initial detection of standard system flags
       const flags: string[] = [];
+      const instructions: string[] = [];
+      
       if (doc_type === "CREDIT_MEMO") flags.push("CREDIT_MEMO");
-      if (desc.includes("RGA")) flags.push("RGA");
-      if (desc.includes("SPECIAL LAYOUT")) flags.push("SPECIAL_LAYOUT");
+      if (upperText.includes("RGA")) flags.push("RGA");
+      if (upperText.includes("SPECIAL LAYOUT")) flags.push("SPECIAL_LAYOUT");
       if (DIMENSION_RE.test(combinedText)) flags.push("CUSTOM_LENGTH");
       if ((li.unitPrice ?? 0) === 0) flags.push("ZERO_DOLLAR");
+
+      // Dynamic custom signal detection from Org Profile
+      if (profile?.policy?.exclusions) {
+        for (const rule of profile.policy.exclusions) {
+          // 1. Check Scope (Doc Type)
+          if (rule.scope_doc_type && rule.scope_doc_type.length > 0) {
+            if (!rule.scope_doc_type.includes(doc_type)) continue;
+          }
+
+          // 2. Check Triggers (Keywords)
+          if (rule.keywords && rule.keywords.length > 0) {
+            const hasKeyword = rule.keywords.some(k => upperText.includes(k.toUpperCase()));
+            if (hasKeyword && !flags.includes(rule.reason_code)) {
+              flags.push(rule.reason_code);
+              if (rule.instructions) instructions.push(rule.instructions);
+            }
+          }
+        }
+      }
 
       const item_class: ItemClass =
         (flags.includes("SPECIAL_LAYOUT") || flags.includes("CUSTOM_LENGTH")) ? "CUSTOM" :
@@ -75,7 +97,7 @@ export function geminiResultToPOLineRows(args: {
         confidence_score: 0.65,
 
         automation_lane: "ASSIST",
-        routing_reason: "",
+        routing_reason: instructions.length > 0 ? instructions.join(" | ") : "",
         fields_requiring_review: [],
 
         bill_to_address_raw: doc.billToAddressRaw,

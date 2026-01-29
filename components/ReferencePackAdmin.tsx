@@ -1,10 +1,8 @@
-import React, { useState, useRef, useEffect, useMemo } from "react";
-import { ReferencePack } from "../referencePack.schema";
-import { saveReferencePack, clearReferencePack, EMPTY_REFERENCE_PACK } from "../reference/referenceLocalStore";
-import { finalizeReferencePack } from "../reference/referenceVersioning";
-import { exportReferencePackToXlsx, importReferencePackFromXlsx } from "../services/referencePackXlsx";
-
-declare const XLSX: any;
+import React, { useState, useRef } from "react";
+import { ReferencePack } from "../referencePack.schema.ts";
+import { saveReferencePack, clearReferencePack, EMPTY_REFERENCE_PACK } from "../reference/referenceLocalStore.ts";
+import { finalizeReferencePack } from "../reference/referenceVersioning.ts";
+import { exportReferencePackToXlsx, importReferencePackFromXlsx } from "../services/referencePackXlsx.ts";
 
 type Props = {
   referencePack: ReferencePack;

@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from "react";
-import { ControlSurfacePolicy, PolicyRule } from "../policy/controlSurfacePolicy";
-import { bumpVersion, finalizePolicy } from "../policy/policyVersioning";
-import { savePolicy } from "../policy/policyLocalStore";
-import { importPolicyFromXlsx, exportPolicyToXlsxTemplate } from "../services/policyXlsx";
-import { HeaderInfo } from "./SharedUI";
+import { ControlSurfacePolicy, PolicyRule } from "../policy/controlSurfacePolicy.ts";
+import { bumpVersion, finalizePolicy } from "../policy/policyVersioning.ts";
+import { savePolicy } from "../policy/policyLocalStore.ts";
+import { importPolicyFromXlsx, exportPolicyToXlsxTemplate } from "../services/policyXlsx.ts";
+import { HeaderInfo } from "./SharedUI.tsx";
 
 type Props = {
   policy: ControlSurfacePolicy;

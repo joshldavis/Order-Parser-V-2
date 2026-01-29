@@ -4,15 +4,6 @@ export type SetupStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETE";
 
 export type TruthSourceType = "ERP_EXPORT" | "CONTROL_WORKBOOK" | "MANUAL_JSON";
 
-export type DocType = "PURCHASE_ORDER" | "INVOICE" | "CREDIT_MEMO" | "OTHER";
-
-export type ExclusionReasonCode =
-  | "CREDIT_MEMO"
-  | "SPECIAL_LAYOUT"
-  | "CUSTOM_LENGTH"
-  | "ZERO_DOLLAR"
-  | "THIRD_PARTY_SHIP";
-
 export type ExclusionAction = "HUMAN_REVIEW" | "MANUAL_PROCESS" | "BLOCK";
 
 export interface CalibrationDatasetSummary {
@@ -43,16 +34,22 @@ export interface CatalogSummary {
   created_at: string;
 }
 
+export interface ExclusionRule {
+  reason_code: string;
+  action: ExclusionAction;
+  description?: string;
+  keywords?: string[]; // Trigger keywords for auto-detection
+  instructions?: string; // Guidance for the reviewer when this flag is raised
+  scope_doc_type?: string[]; // Optional: only apply to these doc types
+}
+
 export interface PolicySummary {
-  policy_version_id: string; // aligns to currentPolicy.meta.version in your existing store
+  policy_version_id: string; 
   created_at: string;
-  auto_process_min: number; // 0..1
-  review_min: number; // 0..1
-  block_below: number; // 0..1
-  exclusions: Array<{
-    reason_code: ExclusionReasonCode;
-    action: ExclusionAction;
-  }>;
+  auto_process_min: number; 
+  review_min: number; 
+  block_below: number; 
+  exclusions: ExclusionRule[];
 }
 
 export interface OrgSetupProfile {
