@@ -45,8 +45,18 @@ export const ABH_PO_V1_SCHEMA = {
       required: ["document_id", "document_type", "file"],
       properties: {
         document_id: { type: "string" },
-        document_type: { type: "string", enum: ["PURCHASE_ORDER", "SALES_ORDER", "INVOICE", "CREDIT_MEMO", "UNKNOWN"] },
-        file: { type: "object", required: ["filename"], properties: { filename: { type: "string" } } }
+        document_type: {
+          type: "string",
+          enum: ["PURCHASE_ORDER","SALES_ORDER","INVOICE","CREDIT_MEMO","PICKING_SHEET","EMAIL_COVER","UNKNOWN"]
+        },
+        file: { type: "object", required: ["filename"], properties: { filename: { type: "string" } } },
+        source_pages: {
+          type: "array",
+          items: { type: "number" },
+          description: "0-based page indexes that were used as evidence for this document"
+        },
+        page_start: { type: "number", description: "0-based inclusive" },
+        page_end: { type: "number", description: "0-based inclusive" },
       },
     },
     parties: {
@@ -61,10 +71,20 @@ export const ABH_PO_V1_SCHEMA = {
       type: "object",
       required: ["order_type"],
       properties: {
-        order_type: { type: "string", enum: ["PURCHASE_ORDER", "CREDIT_MEMO"] },
+        order_type: {
+          type: "string",
+          enum: ["PURCHASE_ORDER","SALES_ORDER","INVOICE","CREDIT_MEMO","PICKING_SHEET","EMAIL_COVER","UNKNOWN"]
+        },
         customer_order_no: { type: "string" },
         order_date: { type: "string" },
         currency: { type: "string" },
+        addresses: {
+          type: "object",
+          properties: {
+            ship_to_name: { type: "string" },
+            mark_for: { type: "string" }
+          }
+        }
       },
     },
     line_items: { type: "array", items: { type: "object" } },
@@ -76,8 +96,17 @@ export const ABH_PO_V1_SCHEMA = {
 
 export type RunMode = "SHADOW" | "PILOT" | "PRODUCTION";
 export type Env = "DEV" | "TEST" | "PROD";
-export type DocumentType = "PURCHASE_ORDER" | "SALES_ORDER" | "INVOICE" | "CREDIT_MEMO" | "UNKNOWN";
-export type OrderType = "PURCHASE_ORDER" | "CREDIT_MEMO";
+
+export type DocumentType =
+  | "PURCHASE_ORDER"
+  | "SALES_ORDER"
+  | "INVOICE"
+  | "CREDIT_MEMO"
+  | "PICKING_SHEET"
+  | "EMAIL_COVER"
+  | "UNKNOWN";
+
+export type OrderType = DocumentType;
 export type RoutingDecision = "AUTO_STAGE" | "REVIEW" | "HUMAN_REQUIRED" | "REJECTED";
 
 export type RoutingReasonCode =
@@ -207,6 +236,9 @@ export interface POExportV1 {
       mime_type?: string;
       page_count?: number;
     };
+    source_pages?: number[];
+    page_start?: number;
+    page_end?: number;
   };
   parties: {
     customer: Party;

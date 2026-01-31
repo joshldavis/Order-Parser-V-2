@@ -1,6 +1,14 @@
 // types.ts
 
-export type DocType = "PURCHASE_ORDER" | "CREDIT_MEMO" | "INVOICE" | "UNKNOWN";
+export type DocType =
+  | "PURCHASE_ORDER"
+  | "CREDIT_MEMO"
+  | "INVOICE"
+  | "SALES_ORDER"
+  | "PICKING_SHEET"
+  | "EMAIL_COVER"
+  | "UNKNOWN";
+
 export type AutomationLane = "AUTO" | "REVIEW" | "BLOCK" | "ASSIST";
 export type ItemClass = "CATALOG" | "CONFIGURED" | "CUSTOM" | "UNKNOWN";
 
@@ -8,6 +16,11 @@ export type POLineRow = {
   // --- doc-level identifiers
   doc_id: string;
   doc_type: DocType;
+
+  // segment evidence (debugging / regression)
+  source_pages?: number[];   // 0-based page indexes
+  page_start?: number;       // 0-based inclusive
+  page_end?: number;         // 0-based inclusive
 
   customer_name?: string;
   customer_order_no?: string;

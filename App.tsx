@@ -1,17 +1,15 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { POLineRow, GeminiParsingResult } from './types.ts';
 import { ReferencePack } from './referencePack.schema.ts';
-import { parseDocument } from './services/geminiService.ts';
-import { geminiResultToPOLineRows, downloadCsv } from './services/mappingService.ts';
+import { parseDocument, parsePacketSegment } from './services/geminiService.ts';
+import { geminiResultToPOLineRows } from './services/mappingService.ts';
 import { buildControlSurfaceWorkbook, downloadBlob } from './services/xlsxExport.ts';
-import { exportControlSurfaceCsv } from './services/controlSurfaceExport.ts';
 import { ReferenceService } from './services/referenceService.ts';
 import { enrichAndValidate } from './services/enrichAndValidate.ts';
 import DataTable from './components/DataTable.tsx';
-import { loadPolicy, savePolicy } from './policy/policyLocalStore.ts';
+import { loadPolicy } from './policy/policyLocalStore.ts';
 import { PolicyAdmin } from './components/PolicyAdmin.tsx';
 import { ControlSurfacePolicy } from './policy/controlSurfacePolicy.ts';
-import { applyPolicyRouting } from './services/policyRouting.ts';
 import { loadReferencePack, saveReferencePack } from './reference/referenceLocalStore.ts';
 import { ReferencePackAdmin } from './components/ReferencePackAdmin.tsx';
 import { SetupWizard } from './components/SetupWizard.tsx';
@@ -21,6 +19,9 @@ import { isSetupComplete, OrgSetupProfile } from './setup/orgProfile.types.ts';
 import { buildPOExportsV1 } from './services/jsonExport.ts';
 import { POExportV1, AuditEvent } from './services/abhSchema.ts';
 import JsonExportPanel from './components/JsonExportPanel.tsx';
+import { extractPdfPageText, triagePages, buildSegments } from './services/pdfPacketTriage.ts';
+import { renderPdfPagesToPngBase64 } from './services/pdfRender.ts';
+import { RegressionHarness } from './components/RegressionHarness.tsx';
 
 declare const Tesseract: any;
 
@@ -32,11 +33,13 @@ const App: React.FC = () => {
   const [processingStatus, setProcessingStatus] = useState<string>('');
   const [progress, setProgress] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
-  const [activeTab, setActiveTab] = useState<'ops' | 'policy' | 'reference' | 'setup' | 'help'>('ops');
+  const [activeTab, setActiveTab] = useState<'ops' | 'policy' | 'reference' | 'setup' | 'help' | 'regression'>('ops');
   const [bypassSetup, setBypassSetup] = useState(false);
   const [showJsonExport, setShowJsonExport] = useState(false);
   const [poExports, setPoExports] = useState<POExportV1[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
+  const [lastError, setLastError] = useState<string | null>(null);
   
   const [orgProfileState, setOrgProfileState] = useState<OrgSetupProfile>(() => ensureOrgProfileSeed());
 
@@ -115,84 +118,13 @@ const App: React.FC = () => {
     if (confirm("Clear all extracted line items?")) {
       setRows([]);
       setAuditEvents([]);
+      setLastError(null);
     }
   };
 
-  const processFiles = async (files: FileList) => {
-    const currentProfile = loadOrgProfile() || orgProfileState;
-    if (!isSetupComplete(currentProfile) && !bypassSetup) {
-      if (!confirm("Setup is not complete. AI accuracy might be reduced without custom calibration and catalogues. Proceed anyway?")) {
-        setActiveTab('setup');
-        return;
-      }
-      setBypassSetup(true);
-    }
-
-    setIsProcessing(true);
-    let allNewRows: POLineRow[] = [];
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const fileStem = file.name.replace(/\.[^/.]+$/, "");
-      const stepSize = 100 / files.length;
-      const baseProgress = (i / files.length) * 100;
-
-      if (i > 0) {
-        setProcessingStatus(`Pacing for API Quota (5s)...`);
-        await new Promise(r => setTimeout(r, 5000));
-      }
-
-      try {
-        let ocrTextHint = '';
-        if (file.type.startsWith('image/')) {
-          setProcessingStatus(`OCR analyzing: ${file.name}...`);
-          setProgress(baseProgress + (stepSize * 0.2));
-          try {
-            const result = await Tesseract.recognize(file, 'eng');
-            ocrTextHint = result.data.text;
-          } catch (ocrErr) {
-            console.warn("OCR Hint failed", ocrErr);
-          }
-        }
-
-        setProcessingStatus(`AI Extracting: ${file.name}...`);
-        setProgress(baseProgress + (stepSize * 0.5));
-
-        const base64 = await fileToBase64(file);
-        const parsed: GeminiParsingResult = await parseDocument(
-          base64, 
-          file.type, 
-          ocrTextHint, 
-          referencePack || undefined,
-          (status) => setProcessingStatus(`${file.name}: ${status}`)
-        );
-        
-        let mappedRows = geminiResultToPOLineRows({ 
-          parsed, 
-          sourceFileStem: fileStem,
-          policy: currentPolicy,
-          refPack: referencePack
-        });
-
-        if (referencePack && referencePack.manufacturers.length > 0) {
-          const refService = new ReferenceService(referencePack);
-          mappedRows = enrichAndValidate(mappedRows, refService, referencePack.version);
-        }
-
-        allNewRows = [...allNewRows, ...mappedRows];
-
-      } catch (error: any) {
-        console.error(`Error processing ${file.name}:`, error);
-        alert(`Error processing ${file.name}: Check console for details.`);
-      }
-      setProgress(Math.round(((i + 1) / files.length) * 100));
-    }
-
-    setRows(prev => [...allNewRows, ...prev]);
-    setIsProcessing(false);
-    setProgress(0);
-    setProcessingStatus('');
-    if (fileInputRef.current) fileInputRef.current.value = '';
+  const fileToUint8Array = async (file: File): Promise<Uint8Array> => {
+    const buf = await file.arrayBuffer();
+    return new Uint8Array(buf);
   };
 
   const fileToBase64 = (file: File): Promise<string> => {
@@ -206,6 +138,206 @@ const App: React.FC = () => {
       };
       reader.onerror = error => reject(error);
     });
+  };
+
+  const runParseForFile = async (file: File): Promise<POExportV1[]> => {
+    const fileStem = file.name.replace(/\.[^/.]+$/, "");
+    let documents: POExportV1[] = [];
+
+    if (file.type === 'application/pdf') {
+      const data = await fileToUint8Array(file);
+      const pageTexts = await extractPdfPageText(data.slice());
+      const triage = triagePages(pageTexts);
+      const segments = buildSegments(triage).filter(s => s.label !== "UNKNOWN" || (s.pageEnd - s.pageStart) >= 0);
+
+      for (const seg of segments) {
+        if (seg.label === 'EMAIL_COVER') continue;
+        const rendered = await renderPdfPagesToPngBase64(data.slice(), seg.pages, 2.0);
+        const parts = rendered.map(r => ({ base64: r.base64, mimeType: r.mimeType }));
+        const triageHint = seg.triage
+          .map(p => `PAGE ${p.pageIndex + 1}: ${p.label} (${p.score.toFixed(2)}) ${p.reasons.join(", ")}`)
+          .join("\n");
+
+        const result = await parsePacketSegment(
+          parts,
+          {
+            segmentLabelHint: seg.label,
+            sourcePages: seg.pages,
+            pageStart: seg.pageStart,
+            pageEnd: seg.pageEnd,
+            packetFilename: file.name,
+            triageTextHint: triageHint,
+          },
+          referencePack
+        );
+        documents = [...documents, ...(result.documents || [])];
+      }
+    } else {
+      const base64 = await fileToBase64(file);
+      let ocrTextHint = '';
+      if (file.type.startsWith('image/')) {
+        try {
+          const result = await Tesseract.recognize(file, 'eng');
+          ocrTextHint = result.data.text;
+        } catch {}
+      }
+      const parsed = await parseDocument(base64, file.type, ocrTextHint, referencePack || undefined);
+      documents = parsed.documents || [];
+    }
+
+    const mappedRows = geminiResultToPOLineRows({
+      parsed: { documents },
+      sourceFileStem: fileStem,
+      policy: currentPolicy,
+      refPack: referencePack
+    });
+
+    return buildPOExportsV1({
+      rows: mappedRows,
+      appVersion: '2.5.0',
+      runMode: 'PRODUCTION',
+      environment: 'PROD',
+      vendorName: 'ABH Manufacturing',
+      thresholds: {
+        auto_stage_min: currentPolicy.defaults.phase_min_confidence_auto.PHASE_1,
+        review_min: currentPolicy.defaults.phase_min_confidence_auto.PHASE_1 - 0.15
+      },
+      auditEvents: []
+    });
+  };
+
+  const processFiles = async (files: FileList) => {
+    setLastError(null);
+    const currentProfile = loadOrgProfile() || orgProfileState;
+    setSelectedFiles(files);
+    
+    if (!isSetupComplete(currentProfile) && !bypassSetup) {
+      if (!confirm("Setup is not complete. AI accuracy might be reduced without custom calibration and catalogues. Proceed anyway?")) {
+        setActiveTab('setup');
+        return;
+      }
+      setBypassSetup(true);
+    }
+
+    setIsProcessing(true);
+    let allNewRows: POLineRow[] = [];
+    const filesArray = Array.from(files);
+
+    try {
+      for (let i = 0; i < filesArray.length; i++) {
+        const file = filesArray[i];
+        const fileStem = file.name.replace(/\.[^/.]+$/, "");
+        const stepSize = 100 / filesArray.length;
+        const baseProgress = (i / filesArray.length) * 100;
+
+        if (i > 0) {
+          setProcessingStatus(`Pacing for next file...`);
+          await new Promise(r => setTimeout(r, 1000));
+        }
+
+        if (file.type === 'application/pdf') {
+          setProcessingStatus(`Analyzing Document Packet: ${file.name}...`);
+          setProgress(baseProgress + (stepSize * 0.1));
+
+          const data = await fileToUint8Array(file);
+          const pageTexts = await extractPdfPageText(data.slice());
+          const triage = triagePages(pageTexts);
+          const segments = buildSegments(triage).filter(s => s.label !== "UNKNOWN" || (s.pageEnd - s.pageStart) >= 0);
+
+          setProcessingStatus(`Found ${segments.length} documents in ${file.name}...`);
+
+          for (let sIdx = 0; sIdx < segments.length; sIdx++) {
+            const seg = segments[sIdx];
+            if (seg.label === 'EMAIL_COVER') continue;
+
+            setProcessingStatus(`Processing ${seg.label} (Part ${sIdx + 1}/${segments.length})...`);
+            setProgress(baseProgress + (stepSize * (0.2 + (0.8 * ((sIdx + 1) / segments.length)))));
+
+            const rendered = await renderPdfPagesToPngBase64(data.slice(), seg.pages, 2.0);
+            const parts = rendered.map(r => ({ base64: r.base64, mimeType: r.mimeType }));
+            const triageHint = seg.triage
+              .map(p => `PAGE ${p.pageIndex + 1}: ${p.label} (${p.score.toFixed(2)}) ${p.reasons.join(", ")}`)
+              .join("\n");
+
+            const result = await parsePacketSegment(
+              parts,
+              {
+                segmentLabelHint: seg.label,
+                sourcePages: seg.pages,
+                pageStart: seg.pageStart,
+                pageEnd: seg.pageEnd,
+                packetFilename: file.name,
+                triageTextHint: triageHint,
+              },
+              referencePack,
+              (status) => setProcessingStatus(status)
+            );
+            
+            let mappedRows = geminiResultToPOLineRows({ 
+              parsed: result, 
+              sourceFileStem: `${fileStem}_doc${sIdx+1}`,
+              policy: currentPolicy,
+              refPack: referencePack
+            });
+
+            if (referencePack && referencePack.manufacturers.length > 0) {
+              const refService = new ReferenceService(referencePack);
+              mappedRows = enrichAndValidate(mappedRows, refService, referencePack.version);
+            }
+            allNewRows = [...allNewRows, ...mappedRows];
+          }
+        } else {
+          const base64 = await fileToBase64(file);
+          let ocrTextHint = '';
+          if (file.type.startsWith('image/')) {
+            setProcessingStatus(`Running OCR: ${file.name}...`);
+            setProgress(baseProgress + (stepSize * 0.2));
+            try {
+              if (typeof Tesseract !== 'undefined') {
+                const result = await Tesseract.recognize(file, 'eng');
+                ocrTextHint = result.data.text;
+              }
+            } catch (ocrErr) {
+              console.warn("OCR Hint failed", ocrErr);
+            }
+          }
+
+          setProcessingStatus(`AI Extracting: ${file.name}...`);
+          setProgress(baseProgress + (stepSize * 0.5));
+
+          const parsed: GeminiParsingResult = await parseDocument(
+            base64, 
+            file.type, 
+            ocrTextHint, 
+            referencePack || undefined,
+            (status) => setProcessingStatus(`${file.name}: ${status}`)
+          );
+          
+          let mappedRows = geminiResultToPOLineRows({ 
+            parsed, 
+            sourceFileStem: fileStem,
+            policy: currentPolicy,
+            refPack: referencePack
+          });
+
+          if (referencePack && referencePack.manufacturers.length > 0) {
+            const refService = new ReferenceService(referencePack);
+            mappedRows = enrichAndValidate(mappedRows, refService, referencePack.version);
+          }
+          allNewRows = [...allNewRows, ...mappedRows];
+        }
+        setProgress(Math.round(((i + 1) / filesArray.length) * 100));
+      }
+      setRows(prev => [...allNewRows, ...prev]);
+    } catch (error: any) {
+      console.error("Critical Processing Error:", error);
+      setLastError(error?.message || "An unknown error occurred during document processing.");
+    } finally {
+      setIsProcessing(false);
+      setProgress(0);
+      setProcessingStatus('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   return (
@@ -251,6 +383,12 @@ const App: React.FC = () => {
               <i className="fa-solid fa-book"></i> Catalog
             </button>
             <button 
+              onClick={() => setActiveTab('regression')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === 'regression' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              <i className="fa-solid fa-flask"></i> Regressions
+            </button>
+            <button 
               onClick={() => setActiveTab('setup')}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === 'setup' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
@@ -276,17 +414,30 @@ const App: React.FC = () => {
               </div>
             )}
 
-            {activeTab === 'ops' && (
+            {(activeTab === 'ops' || activeTab === 'regression') && (
               <button onClick={() => fileInputRef.current?.click()} disabled={isProcessing} className="flex items-center gap-2 px-6 py-2.5 bg-slate-900 text-white rounded-xl font-black hover:bg-slate-800 transition-all shadow-xl active:scale-95 text-xs">
                 <i className="fa-solid fa-plus-circle"></i> Import PDF
               </button>
             )}
-            <input type="file" ref={fileInputRef} onChange={(e) => e.target.files && processFiles(e.target.files)} className="hidden" multiple accept="application/pdf,image/*" />
+            <input type="file" ref={fileInputRef} onChange={(e) => { if(activeTab === 'ops' && e.target.files) processFiles(e.target.files); else setSelectedFiles(e.target.files); }} className="hidden" multiple accept="application/pdf,image/*" />
           </div>
         </div>
       </header>
 
       <main className="flex-grow max-w-7xl mx-auto w-full px-6 py-8">
+        {lastError && (
+          <div className="mb-8 p-6 bg-rose-50 border border-rose-200 rounded-[2rem] flex items-start gap-4 animate-in fade-in slide-in-from-top-4">
+            <div className="w-10 h-10 bg-rose-600 text-white rounded-full flex items-center justify-center shrink-0 shadow-lg">
+              <i className="fa-solid fa-circle-exclamation"></i>
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-rose-900 uppercase tracking-widest mb-1">Processing Failed</h3>
+              <p className="text-xs text-rose-800 font-medium leading-relaxed">{lastError}</p>
+              <button onClick={() => setLastError(null)} className="mt-3 text-[10px] font-black text-rose-600 uppercase hover:underline">Dismiss Error</button>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'ops' ? (
           <>
             {isProcessing ? (
@@ -297,7 +448,7 @@ const App: React.FC = () => {
                 <div className="flex flex-col items-center gap-8">
                   <div className="w-24 h-24 border-[5px] border-slate-100 border-t-indigo-600 rounded-full animate-spin"></div>
                   <h3 className="text-2xl font-black text-slate-900 tracking-tight">{processingStatus}</h3>
-                  <p className="text-slate-400 font-medium max-w-sm">Gemini 3 Pro is analyzing document structure and extracting line items...</p>
+                  <p className="text-slate-400 font-medium max-w-sm">Gemini Flash is analyzing document structure and extracting line items...</p>
                 </div>
               </div>
             ) : rows.length === 0 ? (
@@ -337,6 +488,8 @@ const App: React.FC = () => {
           <PolicyAdmin policy={currentPolicy} onPolicyChange={handlePolicyUpdated} />
         ) : activeTab === 'reference' ? (
           <ReferencePackAdmin referencePack={referencePack} onReferencePackChange={handleReferencePackUpdated} />
+        ) : activeTab === 'regression' ? (
+          <RegressionHarness files={selectedFiles} runParseForFile={runParseForFile} />
         ) : activeTab === 'setup' ? (
           <SetupWizard
             currentPolicy={currentPolicy}

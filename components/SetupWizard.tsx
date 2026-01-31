@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useRef } from "react";
 import { OrgSetupProfile, ExclusionAction, ExclusionRule, isSetupComplete } from "../setup/orgProfile.types.ts";
 import { ensureOrgProfileSeed, loadOrgProfile, saveOrgProfile, resetOrgProfile } from "../setup/orgProfile.store.ts";
@@ -180,6 +179,14 @@ export const SetupWizard: React.FC<{
     setWasJustDeployed(true);
   };
 
+  const handleFullReset = () => {
+    if (confirm("Factory Reset: This will clear all Organization Settings, Policies, and Master Catalogues. Continue?")) {
+      resetOrgProfile();
+      // Force a full application reload to re-seed from clean storage
+      window.location.reload();
+    }
+  };
+
   const StepBadge = ({ n, label, active }: { n: number, label: string, active: boolean }) => (
     <div className="flex items-center gap-3">
        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black transition-all text-[10px] ${active ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}>
@@ -274,7 +281,7 @@ export const SetupWizard: React.FC<{
            <StepBadge n={3} label="Resources" active={step === 3} />
            <StepBadge n={4} label="Logic" active={step === 4} />
         </div>
-        <button onClick={() => { if(confirm("Clear organization configuration?")) { resetOrgProfile(); window.location.reload(); } }} className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-400 text-[10px] font-black uppercase tracking-widest hover:text-rose-600 hover:bg-rose-50 transition-all">
+        <button onClick={handleFullReset} className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-400 text-[10px] font-black uppercase tracking-widest hover:text-rose-600 hover:bg-rose-50 transition-all">
           <i className="fa-solid fa-rotate-left mr-2"></i> Reset
         </button>
       </div>
@@ -428,17 +435,50 @@ export const SetupWizard: React.FC<{
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="bg-slate-50/50 p-10 rounded-[3rem] border border-slate-100 text-center ring-1 ring-slate-200/50 shadow-sm">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 block">Auto-Pass Min</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-center gap-1">
+                Auto-Pass Min
+                <HeaderInfo 
+                  title="Auto-Pass Min" 
+                  description="The minimum confidence floor for touchless processing."
+                  details={[
+                    "Documents above this level with no flags skip human review.",
+                    "Higher values prioritize accuracy (less human check).",
+                    "Lower values prioritize speed (more touchless pass)."
+                  ]}
+                />
+              </label>
               <input type="number" step="0.01" value={autoMin} onChange={(e) => { setAutoMin(Number(e.target.value)); markDirty(); }} className="w-full bg-transparent text-5xl font-black text-emerald-600 text-center outline-none border-none" />
               <div className="mt-6 px-4 py-1.5 bg-emerald-50 text-emerald-700 text-[10px] font-black rounded-lg inline-block uppercase tracking-tighter">Direct to ERP</div>
             </div>
             <div className="bg-slate-50/50 p-10 rounded-[3rem] border border-slate-100 text-center ring-1 ring-slate-200/50 shadow-sm">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 block">Review Threshold</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-center gap-1">
+                Review Threshold
+                <HeaderInfo 
+                  title="Review Threshold" 
+                  description="The baseline for human verification queuing."
+                  details={[
+                    "Determines the 'Review' lane floor.",
+                    "Items between this and Auto-Pass are queued for verification.",
+                    "Suggested standard is usually ~15% below Auto-Pass."
+                  ]}
+                />
+              </label>
               <input type="number" step="0.01" value={reviewMin} onChange={(e) => { setReviewMin(Number(e.target.value)); markDirty(); }} className="w-full bg-transparent text-5xl font-black text-blue-600 text-center outline-none border-none" />
               <div className="mt-6 px-4 py-1.5 bg-blue-50 text-blue-700 text-[10px] font-black rounded-lg inline-block uppercase tracking-tighter">Human Verification</div>
             </div>
             <div className="bg-slate-50/50 p-10 rounded-[3rem] border border-slate-100 text-center ring-1 ring-slate-200/50 shadow-sm">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 block">Hard Block Below</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-center gap-1">
+                Hard Block Below
+                <HeaderInfo 
+                  title="Hard Block Floor" 
+                  description="The failure floor for document ingestion."
+                  details={[
+                    "Confidence scores below this level are considered too unreliable.",
+                    "Blocked items require full manual entry/re-scanning.",
+                    "Helps prevent garbage data from entering review queues."
+                  ]}
+                />
+              </label>
               <input type="number" step="0.01" value={blockBelow} onChange={(e) => { setBlockBelow(Number(e.target.value)); markDirty(); }} className="w-full bg-transparent text-5xl font-black text-rose-600 text-center outline-none border-none" />
               <div className="mt-6 px-4 py-1.5 bg-rose-50 text-rose-700 text-[10px] font-black rounded-lg inline-block uppercase tracking-tighter">Stop Processing</div>
             </div>

@@ -1,4 +1,3 @@
-
 // services/policyRouting.ts
 import { POLineRow } from "../types.ts";
 import { ControlSurfacePolicy, PolicyContext, PolicyRule } from "../policy/controlSurfacePolicy.ts";
@@ -55,6 +54,19 @@ export function applyPolicyRouting(rows: POLineRow[], policy: ControlSurfacePoli
   const sortedRules = [...policy.rules].sort((a, b) => b.priority - a.priority);
 
   return rows.map((row) => {
+    // Hard quarantine: EMAIL_COVER should not produce exportable line rows
+    if (row.doc_type === "EMAIL_COVER") {
+      return {
+        ...row,
+        automation_lane: "BLOCK",
+        routing_reason: "EMAIL_COVER is non-line document (no export lines).",
+        policy_version_applied: policy.meta.version,
+        policy_rule_ids_applied: ["DEFAULT:DOC_TYPE:EMAIL_COVER"],
+        sage_import_ready: false,
+        sage_blockers: Array.from(new Set([...(row.sage_blockers ?? []), "DOC_TYPE_EMAIL_COVER_NO_LINES"])),
+      };
+    }
+
     let lane = row.automation_lane; // start from whatever extraction did
     let reason = row.routing_reason ?? "";
     const applied: string[] = [];
@@ -83,8 +95,6 @@ export function applyPolicyRouting(rows: POLineRow[], policy: ControlSurfacePoli
         reason = rule.then.reason;
         row.fields_requiring_review = rule.then.fields_requiring_review;
         applied.push(rule.rule_id);
-        // Usually break after first high priority match if desired, 
-        // but here we allow the last matching (highest priority) to stick.
       }
     }
 

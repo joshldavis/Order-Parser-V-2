@@ -6,6 +6,8 @@ import {
   RoutingReasonCode,
   RoutingDecision,
   RunMode,
+  DocumentType,
+  OrderType
 } from './abhSchema.ts';
 
 type BuildJsonExportParams = {
@@ -159,7 +161,7 @@ export function buildPOExportsV1(params: BuildJsonExportParams): POExportV1[] {
       },
       document: {
         document_id: docId,
-        document_type: first.doc_type as any,
+        document_type: first.doc_type as DocumentType,
         file: { filename: `${docId}.pdf` },
       },
       parties: {
@@ -167,7 +169,7 @@ export function buildPOExportsV1(params: BuildJsonExportParams): POExportV1[] {
         vendor: { name: vendorName },
       },
       order: {
-        order_type: first.doc_type === 'CREDIT_MEMO' ? 'CREDIT_MEMO' : 'PURCHASE_ORDER',
+        order_type: (first.doc_type as OrderType),
         customer_order_no: first.customer_order_no,
         order_date: first.document_date,
         currency: first.currency,

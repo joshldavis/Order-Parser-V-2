@@ -1,23 +1,9 @@
+
 {
-  "name": "orderflow-parser-v2---set-up-module---2025128",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
   "dependencies": {
-    "react": "18.2.0",
-    "react-dom": "18.2.0",
-    "@google/genai": "latest",
-    "xlsx": "latest"
+    "pdfjs-dist": "4.10.38"
   },
   "devDependencies": {
-    "@types/node": "^22.14.0",
-    "@vitejs/plugin-react": "^5.0.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "@types/pdfjs-dist": "4.10.38"
   }
 }

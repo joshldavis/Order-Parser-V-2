@@ -18,6 +18,12 @@ export const DEFAULT_POLICY: ControlSurfacePolicy = {
     default_lane: "ASSIST",
     lane_for_doc_type: {
       CREDIT_MEMO: "REVIEW",
+      // New doc types (packet parsing)
+      EMAIL_COVER: "BLOCK",        // should not create export lines
+      PICKING_SHEET: "ASSIST",     // exportable, but often incomplete / internal
+      INVOICE: "ASSIST",           // exportable, but ABH-internal in many workflows
+      SALES_ORDER: "ASSIST",       // exportable, but typically downstream of PO
+      UNKNOWN: "REVIEW",           // requires classification review
     },
     lane_for_item_class: {
       CATALOG: "AUTO",

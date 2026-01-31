@@ -9,22 +9,26 @@
     <!-- Tesseract.js for client-side OCR hint generation -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script>
-      // Shim process.env for browser ESM compatibility
-      window.process = window.process || { env: {} };
+      // CRITICAL: Shim process.env before any modules load
+      window.process = window.process || {};
+      window.process.env = window.process.env || {};
     </script>
     <script type="importmap">
-    {
-      "imports": {
-        "react": "https://esm.sh/react@18.2.0",
-        "react-dom": "https://esm.sh/react-dom@18.2.0",
-        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client?external=react",
-        "react/": "https://esm.sh/react@18.2.0/",
-        "react-dom/": "https://esm.sh/react-dom@18.2.0/",
-        "@google/genai": "https://esm.sh/@google/genai",
-        "xlsx": "https://esm.sh/xlsx"
-      }
-    }
-    </script>
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom": "https://esm.sh/react-dom@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client?external=react",
+    "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime",
+    "@google/genai": "https://esm.sh/@google/genai",
+    "xlsx": "https://esm.sh/xlsx",
+    "pdfjs-dist": "https://esm.sh/pdfjs-dist@4.10.38",
+    "pdfjs-dist/build/pdf.worker.mjs": "https://esm.sh/pdfjs-dist@4.10.38/build/pdf.worker.mjs",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/"
+  }
+}
+</script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
         body {
@@ -47,27 +51,43 @@
         }
     </style>
     <script>
-      // Global error listener to help debug if the module fails to load
-      window.onerror = function(msg, url, lineNo, columnNo, error) {
+      // Enhanced diagnostic error listener
+      const displayError = (msg, stack) => {
         const root = document.getElementById('root');
-        if (root && (root.innerHTML === '' || root.innerHTML.includes('Bootstrapping'))) {
+        if (root) {
           root.innerHTML = `
-            <div style="padding: 2rem; font-family: sans-serif; background: #fff1f2; color: #991b1b; border: 1px solid #fecaca; border-radius: 1rem; margin: 2rem; max-width: 800px; margin-left: auto; margin-right: auto; text-align: center;">
-              <h2 style="margin-top: 0;">Application Startup Error</h2>
-              <p>A fatal error prevented the application from starting. This is likely due to a module loading conflict.</p>
-              <pre style="background: #1a1a1a; color: #f87171; padding: 1.5rem; overflow: auto; font-size: 13px; border-radius: 0.5rem; line-height: 1.5; text-align: left; margin: 1rem 0;">${msg}\nURL: ${url}\nLine: ${lineNo}</pre>
-              <button onclick="location.reload()" style="background: #991b1b; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 0.75rem; cursor: pointer; font-weight: bold;">Retry Launch</button>
+            <div style="padding: 2.5rem; font-family: 'Inter', sans-serif; background: #fff1f2; color: #991b1b; border: 1px solid #fecaca; border-radius: 1.5rem; margin: 2rem; max-width: 900px; margin-left: auto; margin-right: auto; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);">
+              <h2 style="margin-top: 0; font-weight: 900; letter-spacing: -0.025em;">Initialization Failure</h2>
+              <p style="font-weight: 500; opacity: 0.8;">The application failed to start. This is usually due to a module resolution error or a network interruption.</p>
+              <div style="background: #1a1a1a; color: #f87171; padding: 1.5rem; overflow: auto; font-size: 13px; border-radius: 0.75rem; line-height: 1.6; text-align: left; margin: 1.5rem 0; font-family: monospace;">
+                <strong>Error:</strong> ${msg}<br><br>
+                ${stack ? `<strong>Stack Trace:</strong><br>${stack}` : ''}
+              </div>
+              <button onclick="location.reload()" style="background: #991b1b; color: white; border: none; padding: 0.85rem 1.75rem; border-radius: 1rem; cursor: pointer; font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; transition: opacity 0.2s;">
+                Restart Engine
+              </button>
             </div>
           `;
         }
+      };
+
+      window.onerror = function(msg, url, lineNo, columnNo, error) {
+        console.error("Global Error:", msg, "at", url, ":", lineNo);
+        displayError(msg, error?.stack);
         return false;
+      };
+
+      window.onunhandledrejection = function(event) {
+        console.error("Unhandled Rejection:", event.reason);
+        displayError(`Promise Rejected: ${event.reason}`, event.reason?.stack);
       };
     </script>
 </head>
 <body class="text-slate-900 overflow-x-hidden">
     <div id="root">
-        <div class="flex items-center justify-center min-h-screen bg-slate-50 text-slate-400 font-bold animate-pulse">
-            Bootstrapping Document Parser Engine...
+        <div class="flex flex-col items-center justify-center min-h-screen bg-slate-50 text-slate-400">
+            <div class="w-12 h-12 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
+            <div class="font-black uppercase tracking-[0.2em] text-[10px]">Bootstrapping Parser Engine...</div>
         </div>
     </div>
     <script type="module" src="index.tsx"></script>

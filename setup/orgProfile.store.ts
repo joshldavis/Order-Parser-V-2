@@ -2,6 +2,8 @@
 import { OrgSetupProfile } from "./orgProfile.types.ts";
 
 const KEY = "orderflow_org_profile_v1";
+const POLICY_KEY = "control_surface_policy_v1";
+const REF_KEY = "orderflow.referencePack";
 
 function nowIso() {
   return new Date().toISOString();
@@ -30,9 +32,15 @@ export function saveOrgProfile(profile: OrgSetupProfile) {
   }
 }
 
+/**
+ * Perform a full "Factory Reset" of the setup state.
+ * Clears Org Profile, Policy, and Reference Pack.
+ */
 export function resetOrgProfile() {
   try {
     localStorage.removeItem(KEY);
+    localStorage.removeItem(POLICY_KEY);
+    localStorage.removeItem(REF_KEY);
   } catch (e) {
     console.warn("LocalStorage resetOrgProfile failed", e);
   }
